@@ -93,9 +93,14 @@ string scoreText()
     else if (oppScore > 100 && oppScore > myScore)
         lead = "\n>>> " + oppName + " is leading! <<<";
 
+    string bankable = "";
+    if (gameState == GS_MY_TURN && turnTotal > 0)
+        bankable = "Bank: " + (string)(myScore + turnTotal) + "\n";
+
     return "=== GREEDY DICE ===\n"
-         + "You: "    + (string)myScore   + "   "
-         + oppName    + ": " + (string)oppScore + "\n"
+         + myName  + ": " + (string)myScore   + "\n"
+         + oppName + ": " + (string)oppScore  + "\n"
+         + bankable
          + "Turn:  "  + (string)turnTotal + "\n"
          + who + lead;
 }
