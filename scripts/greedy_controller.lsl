@@ -51,11 +51,12 @@ integer GS_MY_TURN     = 3;   // Active turn for the local player
 integer GS_OPP_TURN    = 4;   // Opponent's turn
 
 // ---- Persistent variables ----
-integer gameState   = 0;
-integer myScore     = 0;
-integer oppScore    = 0;
-integer turnTotal   = 0;
-integer currentDie  = 6;     // Active die face count
+integer gameState    = 0;
+integer myScore      = 0;
+integer oppScore     = 0;
+integer turnTotal    = 0;
+integer oppTurnTotal = 0;    // Opponent's accumulated roll total this turn
+integer currentDie   = 6;    // Active die face count
 integer isChallenger = FALSE; // TRUE when this player sent the challenge
 
 key    myKey;
@@ -93,14 +94,19 @@ string scoreText()
     else if (oppScore > 100 && oppScore > myScore)
         lead = "\n>>> " + oppName + " is leading! <<<";
 
-    string bankable = "";
+    string myBankable = "";
     if (gameState == GS_MY_TURN && turnTotal > 0)
-        bankable = "Bank: " + (string)(myScore + turnTotal) + "\n";
+        myBankable = "  Possible Bank: " + (string)(myScore + turnTotal) + "\n";
+
+    string oppBankable = "";
+    if (gameState == GS_OPP_TURN && oppTurnTotal > 0)
+        oppBankable = "  Possible Bank: " + (string)(oppScore + oppTurnTotal) + "\n";
 
     return "=== GREEDY DICE ===\n"
-         + myName  + ": " + (string)myScore   + "\n"
-         + oppName + ": " + (string)oppScore  + "\n"
-         + bankable
+         + myName  + ": " + (string)myScore  + "\n"
+         + myBankable
+         + oppName + ": " + (string)oppScore + "\n"
+         + oppBankable
          + "Turn:  "  + (string)turnTotal + "\n"
          + who + lead;
 }
@@ -124,8 +130,9 @@ startMyTurn()
 // Transition to "opponent's turn"
 startOppTurn()
 {
-    gameState = GS_OPP_TURN;
-    turnTotal = 0;
+    gameState    = GS_OPP_TURN;
+    turnTotal    = 0;
+    oppTurnTotal = 0;
     llMessageLinked(LINK_SET, MSG_OPP_TURN,   "", NULL_KEY);
     llMessageLinked(LINK_SET, MSG_CHEAT_SHOW, "", NULL_KEY);
     broadcastScore();
@@ -405,10 +412,29 @@ default
                 currentDie = (integer)llList2String(p, 1);
                 startMyTurn();
             }
+            else if (cmd == "ROLL")
+            {
+                // Opponent rolled; display each roll to us
+                if (gameState != GS_OPP_TURN) return;
+                integer roll = (integer)llList2String(p, 1);
+                if (roll == 1)
+                {
+                    oppTurnTotal = 0;
+                    llOwnerSay(oppName + " rolled a 1!  Turn over – they lose their turn points.");
+                }
+                else
+                {
+                    oppTurnTotal += roll;
+                    llOwnerSay(oppName + " rolled " + (string)roll
+                        + "!  Their turn total: " + (string)oppTurnTotal);
+                    broadcastScore();
+                }
+            }
             else if (cmd == "BANK")
             {
                 // Opponent banked some points
-                oppScore = (integer)llList2String(p, 1);
+                oppScore     = (integer)llList2String(p, 1);
+                oppTurnTotal = 0;
                 if (llList2String(p, 2) == "WIN")
                     llOwnerSay(">>> " + oppName + " banked "
                         + (string)oppScore
@@ -445,12 +471,14 @@ default
             {
                 turnTotal = 0;
                 llOwnerSay("Rolled a 1!  Turn over – turn points lost.");
+                llRegionSayTo(oppKey, gameChannel, "ROLL|" + str);
                 passToOpponent();
             }
             else
             {
                 turnTotal += roll;
                 llOwnerSay("Rolled " + str + "!  Turn total: " + (string)turnTotal);
+                llRegionSayTo(oppKey, gameChannel, "ROLL|" + str);
                 broadcastScore();
             }
         }
