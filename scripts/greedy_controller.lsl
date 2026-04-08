@@ -71,20 +71,7 @@ integer dlgHandle  = 0;
 list    nearNames  = [];
 list    nearKeys   = [];
 
-// ---- Cached link numbers ----
-integer dispLink = -1;   // Link number of the "Score Display" child prim
-
 // ---- Helpers ----
-
-// Return the link number of a child prim by name (-1 if not found)
-integer linkByName(string name)
-{
-    integer n = llGetNumberOfPrims();
-    integer i;
-    for (i = 1; i <= n; i++)
-        if (llGetLinkName(i) == name) return i;
-    return -1;
-}
 
 // Build the floating-text score string
 string scoreText()
@@ -107,14 +94,10 @@ string scoreText()
          + who + lead;
 }
 
-// Set score text directly on the "Score Display" child prim
+// Set score text on the root prim
 broadcastScore()
 {
-    if (dispLink == -1)
-        llOwnerSay("WARNING: 'Score Display' prim not found in linkset.");
-    else
-        llSetLinkPrimitiveParamsFast(dispLink,
-            [PRIM_TEXT, scoreText(), <1.0, 1.0, 1.0>, 1.0]);
+    llSetText(scoreText(), <1.0, 1.0, 1.0>, 1.0);
 }
 
 // Transition to "my turn"
@@ -160,7 +143,6 @@ doReset()
 
     llMessageLinked(LINK_SET, MSG_GAME_RESET, "", NULL_KEY);
     broadcastScore();
-    llSetText("GREEDY DICE\nClick to challenge", <1.0, 1.0, 0.0>, 1.0);
 }
 
 // ============================================================
@@ -171,8 +153,6 @@ default
         myKey       = llGetOwner();
         myName      = llKey2Name(myKey);
         lobbyHandle = llListen(LOBBY_CHANNEL, "", NULL_KEY, "");
-        dispLink    = linkByName("Score Display");
-        llSetText("GREEDY DICE\nClick to challenge", <1.0, 1.0, 0.0>, 1.0);
         broadcastScore();
     }
 
@@ -283,7 +263,6 @@ default
                 // Tell challenger which die was picked; they go first
                 llRegionSayTo(oppKey, gameChannel, "DIE_CHOSEN|" + (string)ds);
                 llOwnerSay("You chose d" + (string)ds + "! " + oppName + " goes first.");
-                llSetText("GREEDY DICE", <1.0, 1.0, 0.0>, 1.0);
                 startOppTurn();   // challenger's turn, so we wait
                 return;
             }
@@ -336,14 +315,13 @@ default
                 // Opponent declined our challenge
                 gameState = GS_IDLE;
                 llOwnerSay(oppName + " declined your challenge.");
-                llSetText("GREEDY DICE\nClick to challenge", <1.0, 1.0, 0.0>, 1.0);
+                broadcastScore();
             }
             else if (cmd == "DIE_CHOSEN")
             {
                 // We are the challenger; opponent chose the die; our turn first
                 currentDie = (integer)llList2String(p, 1);
                 llOwnerSay(oppName + " chose d" + (string)currentDie + ". Your turn first!");
-                llSetText("GREEDY DICE", <1.0, 1.0, 0.0>, 1.0);
                 startMyTurn();
             }
             else if (cmd == "TURN_START")
