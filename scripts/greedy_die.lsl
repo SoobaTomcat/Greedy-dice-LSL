@@ -22,18 +22,27 @@ integer MSG_MY_TURN    = 2;
 integer MSG_OPP_TURN   = 3;
 integer MSG_DIE_ROLLED = 100;
 
+// How far off-screen (in metres, local X axis) to park inactive dice
+float OFFSCREEN_X = 5.0;
+
 integer dieSize  = 0;    // Face count read from prim description
 integer isActive = FALSE; // TRUE when this die is the selected die on our turn
+vector  homePos;          // Local position of this prim relative to root
 
 default
 {
     state_entry()
     {
+        integer linkNum = llGetLinkNumber();
+
         // Read face count from this prim's own description
-        dieSize = (integer)llList2String(
-            llGetLinkPrimitiveParams(llGetLinkNumber(), [PRIM_DESC]), 0);
+        dieSize = (integer)llGetObjectDesc();
 
         if (dieSize < 2) dieSize = 6; // safety fallback
+
+        // Remember where this prim lives so we can return it here later
+        homePos = llList2Vector(
+            llGetLinkPrimitiveParams(linkNum, [PRIM_POS_LOCAL]), 0);
 
         // Hidden until activated
         llSetAlpha(0.0, ALL_SIDES);
@@ -73,12 +82,18 @@ default
             integer activeDie = (integer)str;
             if (activeDie == dieSize)
             {
+                // Move back to home position so it can be clicked
+                llSetLinkPrimitiveParamsFast(llGetLinkNumber(),
+                    [PRIM_POS_LOCAL, homePos]);
                 llSetAlpha(1.0, ALL_SIDES);
                 llSetText("d" + (string)dieSize, <1.0, 1.0, 1.0>, 1.0);
                 isActive = TRUE;
             }
             else
             {
+                // Park off-screen to the right so it cannot intercept clicks
+                llSetLinkPrimitiveParamsFast(llGetLinkNumber(),
+                    [PRIM_POS_LOCAL, homePos + <OFFSCREEN_X, 0.0, 0.0>]);
                 llSetAlpha(0.0, ALL_SIDES);
                 llSetText("", ZERO_VECTOR, 0.0);
                 isActive = FALSE;
@@ -86,6 +101,9 @@ default
         }
         else if (num == MSG_OPP_TURN || num == MSG_GAME_RESET)
         {
+            // Return to home position and hide
+            llSetLinkPrimitiveParamsFast(llGetLinkNumber(),
+                [PRIM_POS_LOCAL, homePos]);
             llSetAlpha(0.0, ALL_SIDES);
             llSetText("", ZERO_VECTOR, 0.0);
             isActive = FALSE;
