@@ -115,6 +115,7 @@ broadcastScore()
 // Transition to "my turn"
 startMyTurn()
 {
+    llSetAlpha(0.0, ALL_SIDES);
     gameState = GS_MY_TURN;
     turnTotal = 0;
     llMessageLinked(LINK_SET, MSG_MY_TURN,    (string)currentDie, NULL_KEY);
@@ -125,6 +126,7 @@ startMyTurn()
 // Transition to "opponent's turn"
 startOppTurn()
 {
+    llSetAlpha(0.0, ALL_SIDES);
     gameState = GS_OPP_TURN;
     turnTotal = 0;
     llMessageLinked(LINK_SET, MSG_OPP_TURN,   "", NULL_KEY);
@@ -159,6 +161,7 @@ doReset()
 
     llMessageLinked(LINK_SET, MSG_GAME_RESET, "", NULL_KEY);
     broadcastScore();
+    llSetAlpha(1.0, ALL_SIDES);
 }
 
 // ============================================================
@@ -166,6 +169,7 @@ default
 {
     state_entry()
     {
+        llSetAlpha(1.0, ALL_SIDES);
         myKey       = llGetOwner();
         myName      = llKey2Name(myKey);
         lobbyHandle = llListen(LOBBY_CHANNEL, "", NULL_KEY, "");
