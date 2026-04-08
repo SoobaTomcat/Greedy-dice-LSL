@@ -12,7 +12,6 @@
 //   MSG_GAME_RESET  1  – game reset / idle; hide all interactables
 //   MSG_MY_TURN     2  – my turn; str = active die size as integer string
 //   MSG_OPP_TURN    3  – opponent's turn; restrict interactables
-//   MSG_SCORE_TXT   4  – score/status text; str = display text
 //   MSG_CHEAT_HIDE  5  – hide cheat button (reached d20 or used on opp turn)
 //   MSG_CHEAT_SHOW  6  – show cheat button again
 //
@@ -27,7 +26,6 @@
 integer MSG_GAME_RESET = 1;
 integer MSG_MY_TURN    = 2;
 integer MSG_OPP_TURN   = 3;
-integer MSG_SCORE_TXT  = 4;
 integer MSG_CHEAT_HIDE = 5;
 integer MSG_CHEAT_SHOW = 6;
 
@@ -73,7 +71,20 @@ integer dlgHandle  = 0;
 list    nearNames  = [];
 list    nearKeys   = [];
 
+// ---- Cached link numbers ----
+integer dispLink = -1;   // Link number of the "Score Display" child prim
+
 // ---- Helpers ----
+
+// Return the link number of a child prim by name (-1 if not found)
+integer linkByName(string name)
+{
+    integer n = llGetNumberOfPrims();
+    integer i;
+    for (i = 1; i <= n; i++)
+        if (llGetLinkName(i) == name) return i;
+    return -1;
+}
 
 // Build the floating-text score string
 string scoreText()
@@ -96,10 +107,14 @@ string scoreText()
          + who + lead;
 }
 
-// Broadcast score text to all display prims
+// Set score text directly on the "Score Display" child prim
 broadcastScore()
 {
-    llMessageLinked(LINK_SET, MSG_SCORE_TXT, scoreText(), NULL_KEY);
+    if (dispLink == -1)
+        llOwnerSay("WARNING: 'Score Display' prim not found in linkset.");
+    else
+        llSetLinkPrimitiveParamsFast(dispLink,
+            [PRIM_TEXT, scoreText(), <1.0, 1.0, 1.0>, 1.0]);
 }
 
 // Transition to "my turn"
@@ -156,6 +171,7 @@ default
         myKey       = llGetOwner();
         myName      = llKey2Name(myKey);
         lobbyHandle = llListen(LOBBY_CHANNEL, "", NULL_KEY, "");
+        dispLink    = linkByName("Score Display");
         llSetText("GREEDY DICE\nClick to challenge", <1.0, 1.0, 0.0>, 1.0);
         broadcastScore();
     }
