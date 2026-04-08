@@ -55,7 +55,8 @@ integer gameState   = 0;
 integer myScore     = 0;
 integer oppScore    = 0;
 integer turnTotal   = 0;
-integer currentDie  = 6;     // Active die face count
+integer baseDie     = 6;     // Die chosen at game start; never modified by cheating
+integer currentDie  = 6;     // Active die this turn; reset to baseDie each turn start
 integer isChallenger = FALSE; // TRUE when this player sent the challenge
 
 key    myKey;
@@ -134,7 +135,8 @@ startOppTurn()
 // End local player's turn and hand control to opponent
 passToOpponent()
 {
-    llRegionSayTo(oppKey, gameChannel, "TURN_START|" + (string)currentDie);
+    currentDie = baseDie;   // Revert any cheat upgrade; opponent gets the base die
+    llRegionSayTo(oppKey, gameChannel, "TURN_START|" + (string)baseDie);
     startOppTurn();
 }
 
@@ -145,6 +147,7 @@ doReset()
     myScore    = 0;
     oppScore   = 0;
     turnTotal  = 0;
+    baseDie    = 6;
     currentDie = 6;
     oppName    = "Opponent";
     oppKey     = NULL_KEY;
@@ -324,6 +327,7 @@ default
                 if (llListFindList(DIE_SEQUENCE, [ds]) < 0) return;
 
                 currentDie = ds;
+                baseDie    = ds;
                 // Tell challenger which die was picked; they go first
                 llRegionSayTo(oppKey, gameChannel, "DIE_CHOSEN|" + (string)ds);
                 llOwnerSay("You chose d" + (string)ds + "! " + oppName + " goes first.");
@@ -396,6 +400,7 @@ default
             {
                 // We are the challenger; opponent chose the die; our turn first
                 currentDie = (integer)llList2String(p, 1);
+                baseDie    = currentDie;
                 llOwnerSay(oppName + " chose d" + (string)currentDie + ". Your turn first!");
                 startMyTurn();
             }
