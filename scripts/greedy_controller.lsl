@@ -12,6 +12,7 @@
 //   MSG_GAME_RESET  1  – game reset / idle; hide all interactables
 //   MSG_MY_TURN     2  – my turn; str = active die size as integer string
 //   MSG_OPP_TURN    3  – opponent's turn; restrict interactables
+//   MSG_WAITING     4  – challenge sent; only End Game button shown
 //   MSG_CHEAT_HIDE  5  – hide cheat button (reached d20 or used on opp turn)
 //   MSG_CHEAT_SHOW  6  – show cheat button again
 //
@@ -26,6 +27,7 @@
 integer MSG_GAME_RESET = 1;
 integer MSG_MY_TURN    = 2;
 integer MSG_OPP_TURN   = 3;
+integer MSG_WAITING    = 4;   // Challenge sent; only End Game button shown
 integer MSG_CHEAT_HIDE = 5;
 integer MSG_CHEAT_SHOW = 6;
 
@@ -70,6 +72,10 @@ integer dlgChannel = 0;
 integer dlgHandle  = 0;
 list    nearNames  = [];
 list    nearKeys   = [];
+
+// ---- HUD-presence ping state ----
+integer pingChannel = 0;
+integer pingHandle  = 0;
 
 // ---- Helpers ----
 
@@ -138,8 +144,10 @@ doReset()
     oppName    = "Opponent";
     oppKey     = NULL_KEY;
 
-    if (gcHandle)  { llListenRemove(gcHandle);  gcHandle  = 0; }
-    if (dlgHandle) { llListenRemove(dlgHandle); dlgHandle = 0; }
+    if (gcHandle)   { llListenRemove(gcHandle);   gcHandle   = 0; }
+    if (dlgHandle)  { llListenRemove(dlgHandle);  dlgHandle  = 0; }
+    if (pingHandle) { llListenRemove(pingHandle); pingHandle = 0; }
+    llSetTimerEvent(0.0);
 
     llMessageLinked(LINK_SET, MSG_GAME_RESET, "", NULL_KEY);
     broadcastScore();
@@ -168,47 +176,95 @@ default
         }
     }
 
-    // Root prim touched → start a challenge scan
+    // Root prim touched → start a HUD-presence scan
     touch_start(integer nd)
     {
         if (gameState != GS_IDLE) return;
+        // Clear previous results and cancel any in-progress scan
+        nearNames = [];
+        nearKeys  = [];
+        if (pingHandle) { llListenRemove(pingHandle); pingHandle = 0; }
+        llSetTimerEvent(0.0);
+        pingChannel = -1000000 - (integer)llFrand(1000000.0);
+        pingHandle  = llListen(pingChannel, "", NULL_KEY, "");
         llSensor("", NULL_KEY, AGENT, 20.0, PI);
     }
 
     sensor(integer nd)
     {
-        nearNames = [];
-        nearKeys  = [];
+        // Ping each nearby agent; only HUDs wearing this game will reply
         integer i;
-        for (i = 0; i < nd && llGetListLength(nearNames) < 12; i++)
+        integer sent = 0;
+        for (i = 0; i < nd && sent < 12; i++)
         {
             key k = llDetectedKey(i);
             if (k != myKey)
             {
-                nearNames += [llDetectedName(i)];
-                nearKeys  += [(string)k];
+                llRegionSayTo(k, LOBBY_CHANNEL,
+                    "HUD_PING|" + (string)myKey + "|" + (string)pingChannel);
+                ++sent;
             }
         }
-        if (!llGetListLength(nearNames))
+        if (!sent)
         {
+            if (pingHandle) { llListenRemove(pingHandle); pingHandle = 0; }
             llOwnerSay("No other players found nearby.");
             return;
         }
+        llSetTimerEvent(2.0);   // Wait 2 s for HUD_PONG replies
+    }
+
+    no_sensor()
+    {
+        if (pingHandle) { llListenRemove(pingHandle); pingHandle = 0; }
+        llSetTimerEvent(0.0);
+        llOwnerSay("No other players found nearby.");
+    }
+
+    timer()
+    {
+        llSetTimerEvent(0.0);
+        if (pingHandle) { llListenRemove(pingHandle); pingHandle = 0; }
+        if (gameState != GS_IDLE)           // State changed before timer fired
+        {
+            nearNames = [];
+            nearKeys  = [];
+            return;
+        }
+        if (!llGetListLength(nearNames))
+        {
+            llOwnerSay("No other players with the Greedy Dice HUD found nearby.");
+            return;
+        }
         if (dlgHandle) { llListenRemove(dlgHandle); dlgHandle = 0; }
-        dlgChannel = -1 - (integer)llFrand(2000000.0);
+        dlgChannel = -1000000 - (integer)llFrand(1000000.0);
         dlgHandle  = llListen(dlgChannel, "", myKey, "");
         gameState  = GS_CHALLENGING;
         llDialog(myKey, "Challenge which player?", nearNames, dlgChannel);
     }
 
-    no_sensor()
-    {
-        llOwnerSay("No other players found nearby.");
-    }
-
     // -------------------------------------------------------
     listen(integer ch, string name, key id, string msg)
     {
+        // ---- HUD-presence pong (challenger collects responding HUDs) ----
+        if (ch == pingChannel)
+        {
+            list   p   = llParseString2List(msg, ["|"], []);
+            if (llList2String(p, 0) == "HUD_PONG")
+            {
+                string pName = llList2String(p, 1);
+                string pKey  = llList2String(p, 2);
+                // Avoid duplicates; cap at 12 entries (LSL dialog button limit)
+                if (llListFindList(nearKeys, [pKey]) < 0
+                        && llGetListLength(nearNames) < 12)
+                {
+                    nearNames += [pName];
+                    nearKeys  += [pKey];
+                }
+            }
+            return;
+        }
+
         // ---- Dialog responses (from local player) ----
         if (ch == dlgChannel)
         {
@@ -241,6 +297,9 @@ default
                     + "|" + (string)myKey
                     + "|" + (string)gameChannel);
 
+                // Show End Game button so the challenger can quit while waiting
+                llMessageLinked(LINK_SET, MSG_WAITING, "", NULL_KEY);
+
                 llOwnerSay("Challenge sent to " + oppName + "! Waiting for their die choice...");
                 llSetText("Waiting for " + oppName + "...", <1.0, 0.6, 0.0>, 1.0);
                 return;
@@ -269,11 +328,23 @@ default
             return;
         }
 
-        // ---- Lobby: incoming challenge ----
+        // ---- Lobby: incoming messages ----
         if (ch == LOBBY_CHANNEL)
         {
             list   p   = llParseString2List(msg, ["|"], []);
             string cmd = llList2String(p, 0);
+
+            // HUD-presence ping – reply so the sender knows we have the HUD
+            if (cmd == "HUD_PING")
+            {
+                key    requesterKey  = (key)llList2String(p, 1);
+                integer replyChannel = (integer)llList2String(p, 2);
+                if (requesterKey != myKey)
+                    llRegionSayTo(requesterKey, replyChannel,
+                        "HUD_PONG|" + myName + "|" + (string)myKey);
+                return;
+            }
+
             if (cmd != "CHALLENGE") return;
             if (gameState != GS_IDLE) return;  // Already in a game
 
@@ -293,7 +364,7 @@ default
             gcHandle = llListen(gameChannel, "", NULL_KEY, "");
 
             if (dlgHandle) { llListenRemove(dlgHandle); dlgHandle = 0; }
-            dlgChannel = -1 - (integer)llFrand(2000000.0);
+            dlgChannel = -1000000 - (integer)llFrand(1000000.0);
             dlgHandle  = llListen(dlgChannel, "", myKey, "");
 
             gameState = GS_PICK_DIE;
@@ -313,9 +384,8 @@ default
             if (cmd == "DECLINE")
             {
                 // Opponent declined our challenge
-                gameState = GS_IDLE;
+                doReset();
                 llOwnerSay(oppName + " declined your challenge.");
-                broadcastScore();
             }
             else if (cmd == "DIE_CHOSEN")
             {
