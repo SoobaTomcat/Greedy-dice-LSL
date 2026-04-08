@@ -57,6 +57,7 @@ integer oppScore     = 0;
 integer turnTotal    = 0;
 integer oppTurnTotal = 0;    // Opponent's accumulated roll total this turn
 integer currentDie   = 6;    // Active die face count
+integer baseDie     = 6;     // Die chosen at game start; never modified by cheating
 integer isChallenger = FALSE; // TRUE when this player sent the challenge
 
 key    myKey;
@@ -120,6 +121,7 @@ broadcastScore()
 // Transition to "my turn"
 startMyTurn()
 {
+    llSetAlpha(0.0, ALL_SIDES);
     gameState = GS_MY_TURN;
     turnTotal = 0;
     llMessageLinked(LINK_SET, MSG_MY_TURN,    (string)currentDie, NULL_KEY);
@@ -133,6 +135,9 @@ startOppTurn()
     gameState    = GS_OPP_TURN;
     turnTotal    = 0;
     oppTurnTotal = 0;
+    llSetAlpha(0.0, ALL_SIDES);
+    gameState = GS_OPP_TURN;
+    turnTotal = 0;
     llMessageLinked(LINK_SET, MSG_OPP_TURN,   "", NULL_KEY);
     llMessageLinked(LINK_SET, MSG_CHEAT_SHOW, "", NULL_KEY);
     broadcastScore();
@@ -141,7 +146,8 @@ startOppTurn()
 // End local player's turn and hand control to opponent
 passToOpponent()
 {
-    llRegionSayTo(oppKey, gameChannel, "TURN_START|" + (string)currentDie);
+    currentDie = baseDie;   // Revert any cheat upgrade; opponent gets the base die
+    llRegionSayTo(oppKey, gameChannel, "TURN_START|" + (string)baseDie);
     startOppTurn();
 }
 
@@ -152,6 +158,7 @@ doReset()
     myScore    = 0;
     oppScore   = 0;
     turnTotal  = 0;
+    baseDie    = 6;
     currentDie = 6;
     oppName    = "Opponent";
     oppKey     = NULL_KEY;
@@ -163,6 +170,7 @@ doReset()
 
     llMessageLinked(LINK_SET, MSG_GAME_RESET, "", NULL_KEY);
     broadcastScore();
+    llSetAlpha(1.0, ALL_SIDES);
 }
 
 // ============================================================
@@ -170,6 +178,7 @@ default
 {
     state_entry()
     {
+        llSetAlpha(1.0, ALL_SIDES);
         myKey       = llGetOwner();
         myName      = llKey2Name(myKey);
         lobbyHandle = llListen(LOBBY_CHANNEL, "", NULL_KEY, "");
@@ -331,6 +340,7 @@ default
                 if (llListFindList(DIE_SEQUENCE, [ds]) < 0) return;
 
                 currentDie = ds;
+                baseDie    = ds;
                 // Tell challenger which die was picked; they go first
                 llRegionSayTo(oppKey, gameChannel, "DIE_CHOSEN|" + (string)ds);
                 llOwnerSay("You chose d" + (string)ds + "! " + oppName + " goes first.");
@@ -403,6 +413,7 @@ default
             {
                 // We are the challenger; opponent chose the die; our turn first
                 currentDie = (integer)llList2String(p, 1);
+                baseDie    = currentDie;
                 llOwnerSay(oppName + " chose d" + (string)currentDie + ". Your turn first!");
                 startMyTurn();
             }
