@@ -36,8 +36,7 @@ default
         integer linkNum = llGetLinkNumber();
 
         // Read face count from this prim's own description
-        dieSize = (integer)llList2String(
-            llGetLinkPrimitiveParams(linkNum, [PRIM_DESC]), 0);
+        dieSize = (integer)llGetObjectDesc();
 
         if (dieSize < 2) dieSize = 6; // safety fallback
 
