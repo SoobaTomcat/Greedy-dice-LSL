@@ -11,6 +11,7 @@
 integer MSG_GAME_RESET = 1;
 integer MSG_MY_TURN    = 2;
 integer MSG_OPP_TURN   = 3;
+integer MSG_WAITING    = 4;
 integer MSG_END_HIT    = 103;
 
 integer active = FALSE;
@@ -32,7 +33,7 @@ default
 
     link_message(integer sender, integer num, string str, key id)
     {
-        if (num == MSG_MY_TURN || num == MSG_OPP_TURN)
+        if (num == MSG_MY_TURN || num == MSG_OPP_TURN || num == MSG_WAITING)
         {
             llSetAlpha(1.0, ALL_SIDES);
             llSetText("END GAME", <1.0, 0.0, 0.0>, 1.0);
